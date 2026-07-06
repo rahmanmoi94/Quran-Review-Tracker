@@ -11,6 +11,19 @@ Use **Memory Setup** to backfill your real history:
 
 Use **Calendar** to move between dates and edit a specific day's activity. The tracker rebuilds the current heat map, priority queue, and weekly review position from Memory Setup plus every saved calendar day through today.
 
+## Built-In Supabase Settings
+
+For GitHub Pages, edit `config.js` and paste your public Supabase values:
+
+```js
+window.QURAN_TRACKER_CONFIG = {
+  supabaseUrl: "https://your-project.supabase.co",
+  supabaseAnonKey: "your-anon-public-key",
+};
+```
+
+The anon key is safe to include in a browser app when Row Level Security is enabled. Do not put a Supabase service-role key here.
+
 ## Supabase Sync
 
 In Supabase, enable Email and/or Google auth, then create this table:

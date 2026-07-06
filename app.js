@@ -577,7 +577,7 @@ function render() {
         <p>Re-memorization, solidification, and weekly Muraja'ah in one quiet place.</p>
       </div>
       <div class="account">
-        <button class="ghost-button" data-action="sync">${state.syncStatus}</button>
+        <button class="ghost-button" data-action="sync">${syncStatusLabel()}</button>
         <button class="soft-button" data-action="seed">Sample data</button>
       </div>
     </header>
@@ -838,7 +838,7 @@ function renderSyncPanel() {
       <div class="section-head">
         <div>
           <h2>Cloud Sync</h2>
-          <p>Paste a Supabase project URL and anon key to sync this same tracker across devices.</p>
+          <p>Use the built-in Supabase settings, or paste different ones for this browser.</p>
         </div>
       </div>
       <div class="sync-grid">
@@ -855,7 +855,7 @@ function renderSyncPanel() {
         <button class="ghost-button" data-action="email-signup">Create account</button>
         <button class="ghost-button" data-action="google-login">Google</button>
       </div>
-      <p class="message">${state.syncStatus}. Create a Supabase table named <strong>quran_tracker_profiles</strong> with columns <strong>user_id</strong> and <strong>data</strong>.</p>
+      <p class="message">${syncStatusLabel()}. Create a Supabase table named <strong>quran_tracker_profiles</strong> with columns <strong>user_id</strong> and <strong>data</strong>.</p>
     </section>
   `;
 }
@@ -903,11 +903,29 @@ function exportJson() {
 }
 
 function getSupabaseConfig() {
+  const builtIn = {
+    url: window.QURAN_TRACKER_CONFIG?.supabaseUrl || "",
+    key: window.QURAN_TRACKER_CONFIG?.supabaseAnonKey || "",
+  };
   try {
-    return JSON.parse(localStorage.getItem(SUPABASE_CONFIG_KEY)) || {};
+    const saved = JSON.parse(localStorage.getItem(SUPABASE_CONFIG_KEY)) || {};
+    return {
+      url: saved.url || builtIn.url,
+      key: saved.key || builtIn.key,
+      source: saved.url && saved.key ? "saved" : builtIn.url && builtIn.key ? "built-in" : "none",
+    };
   } catch {
-    return {};
+    return { ...builtIn, source: builtIn.url && builtIn.key ? "built-in" : "none" };
   }
+}
+
+function syncStatusLabel() {
+  if (state.syncStatus === "Signed in" || state.syncStatus === "Account created" || state.syncStatus === "Local saved") {
+    return state.syncStatus;
+  }
+  const config = getSupabaseConfig();
+  if (config.url && config.key) return config.source === "built-in" ? "Supabase ready" : state.syncStatus;
+  return "Local only";
 }
 
 function saveSyncConfig() {
