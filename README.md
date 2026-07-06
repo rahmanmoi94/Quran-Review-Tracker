@@ -1,0 +1,34 @@
+# Quran Review Tracker
+
+Open `index.html` in a browser to use the tracker. It saves locally by default.
+
+Use **Memory Setup** to backfill your real history:
+
+- Already memorized pages and whole Ajza' go directly into the weekly review pool.
+- New or solidifying pages go into the priority queue for the 5-day streak.
+- Weak pages go into the priority queue and stay there until the weak flag is cleared.
+- Daily memorization logs require exact page numbers; the app does not assume memorization starts at page 1.
+
+Use **Calendar** to move between dates and edit a specific day's activity. The tracker rebuilds the current heat map, priority queue, and weekly review position from Memory Setup plus every saved calendar day through today.
+
+## Supabase Sync
+
+In Supabase, enable Email and/or Google auth, then create this table:
+
+```sql
+create table public.quran_tracker_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+
+alter table public.quran_tracker_profiles enable row level security;
+
+create policy "Users manage their own tracker"
+on public.quran_tracker_profiles
+for all
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+```
+
+Paste the project URL and anon key into the app's Cloud Sync panel.
