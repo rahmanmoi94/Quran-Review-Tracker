@@ -460,18 +460,19 @@ function completePriorityPage(page, checked) {
   render();
 }
 
-function toggleWeak(page) {
+function toggleWeak(page, isCurrentlyWeak = null) {
   const record = state.pages[page];
   if (!record) return;
+  const weakNow = isCurrentlyWeak === null ? Boolean(record.weak) : Boolean(isCurrentlyWeak);
   const entry = entryFor();
-  if (record.weak) {
+  if (weakNow) {
     entry.weakClearedPages = addUniquePages(entry.weakClearedPages, [page]);
     entry.weakFlaggedPages = entry.weakFlaggedPages.filter((item) => item !== page);
   } else {
     entry.weakFlaggedPages = addUniquePages(entry.weakFlaggedPages, [page]);
     entry.weakClearedPages = entry.weakClearedPages.filter((item) => item !== page);
   }
-  state.message = record.weak
+  state.message = weakNow
     ? `Page ${page} weak flag cleared on ${selectedDateKey()}.`
     : `Page ${page} flagged weak on ${selectedDateKey()}.`;
   rebuildFromHistory();
@@ -590,10 +591,11 @@ function clearPageEverywhere(page) {
   delete state.setupPages[page];
   Object.values(state.dailyEntries).forEach((entry) => {
     if (!entry) return;
+    const normalized = normalizeEntry(entry);
     entry.memorizedPages = (entry.memorizedPages || []).filter((item) => item !== page);
-    entry.priorityReviewedPages = (entry.priorityReviewedPages || []).filter((item) => item !== page);
-    entry.weakFlaggedPages = (entry.weakFlaggedPages || []).filter((item) => item !== page);
-    entry.weakClearedPages = (entry.weakClearedPages || []).filter((item) => item !== page);
+    entry.priorityReviewedPages = normalized.priorityReviewedPages.filter((item) => item !== page);
+    entry.weakFlaggedPages = normalized.weakFlaggedPages.filter((item) => item !== page);
+    entry.weakClearedPages = normalized.weakClearedPages.filter((item) => item !== page);
     if (Number(entry.weeklyStoppedAt) === page) entry.weeklyStoppedAt = "";
   });
 }
@@ -914,16 +916,19 @@ function renderPriorityPanel() {
 function renderPriorityRow(page, records = state.pages) {
   const record = records[page] || state.pages[page];
   const checked = Boolean(state.priorityLogs[`${selectedDateKey()}:${page}`]);
-  const dots = Array.from({ length: SOLIDIFICATION_DAYS }, (_, index) => `<i class="dot ${index < (record.streak || 0) ? "on" : ""}"></i>`).join("");
+  const baseStreak = record.streak || 0;
+  const shownStreak = Math.min(baseStreak + (checked && !record.weak ? 1 : 0), SOLIDIFICATION_DAYS);
+  const dueDay = Math.min(baseStreak + 1, SOLIDIFICATION_DAYS);
+  const dots = Array.from({ length: SOLIDIFICATION_DAYS }, (_, index) => `<i class="dot ${index < shownStreak ? "on" : ""}"></i>`).join("");
   return `
     <div class="review-row">
       <input type="checkbox" ${checked ? "checked" : ""} data-priority="${page}" aria-label="Mark page ${page} reviewed today" />
       <div>
         <div class="page-title">Page ${page}</div>
-        <div class="page-sub">${record.weak ? "Weak spot" : `Day ${Math.min((record.streak || 0) + (checked ? 0 : 1), 5)} of 5`}</div>
+        <div class="page-sub">${record.weak ? "Weak spot" : `Day ${dueDay} of 5`}</div>
         <div class="dots">${dots}</div>
       </div>
-      <button class="weak-toggle ${record.weak ? "on" : ""}" data-weak="${page}">${record.weak ? "Weak" : "Flag"}</button>
+      <button class="weak-toggle ${record.weak ? "on" : ""}" data-weak="${page}" data-weak-state="${record.weak ? "true" : "false"}">${record.weak ? "Weak" : "Flag"}</button>
     </div>
   `;
 }
@@ -996,7 +1001,7 @@ function bindEvents() {
     input.addEventListener("change", (event) => completePriorityPage(Number(event.target.dataset.priority), event.target.checked));
   });
   document.querySelectorAll("[data-weak]").forEach((button) => {
-    button.addEventListener("click", () => toggleWeak(Number(button.dataset.weak)));
+    button.addEventListener("click", () => toggleWeak(Number(button.dataset.weak), button.dataset.weakState === "true"));
   });
   document.querySelectorAll("[data-juz]").forEach((button) => {
     button.addEventListener("click", () => toggleJuzSolid(Number(button.dataset.juz)));
