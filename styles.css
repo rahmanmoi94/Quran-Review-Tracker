@@ -462,6 +462,30 @@ button:disabled {
   background: linear-gradient(90deg, var(--green), #77b384);
 }
 
+.cycle-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f8faf8;
+}
+
+.cycle-toggle button {
+  min-height: 34px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.cycle-toggle button.selected {
+  background: var(--green);
+  color: #fff;
+}
+
 .field {
   display: grid;
   gap: 7px;

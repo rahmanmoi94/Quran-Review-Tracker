@@ -11,6 +11,8 @@ Use **Memory Setup** to backfill your real history:
 
 Use **Calendar** to move between dates and edit a specific day's activity. The tracker rebuilds the current heat map, priority queue, and weekly review position from Memory Setup plus every saved calendar day through today.
 
+Use the **Weekly Review** cycle toggle to switch the daily quota between a 7-day cycle and a 10-day cycle. The review pointer and cycle progress continue from the same place; only the daily target changes.
+
 ## Built-In Supabase Settings
 
 For GitHub Pages, edit `config.js` and paste your public Supabase values:

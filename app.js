@@ -19,6 +19,7 @@ const initialState = {
   setupPages: {},
   dailyEntries: {},
   selectedDate: todayKey(),
+  weeklyCycleDays: 7,
   weeklyStartPage: 1,
   weeklyLastStoppedPage: null,
   reviewLogs: [],
@@ -37,6 +38,7 @@ function freshState(overrides = {}) {
     setupPages: {},
     dailyEntries: {},
     selectedDate: todayKey(),
+    weeklyCycleDays: 7,
     weeklyStartPage: 1,
     weeklyLastStoppedPage: null,
     reviewLogs: [],
@@ -72,6 +74,7 @@ function normalizeState(nextState) {
     setupPages: isPlainObject(nextState.setupPages) ? nextState.setupPages : deriveSetupPages(nextState.pages),
     dailyEntries: isPlainObject(nextState.dailyEntries) ? nextState.dailyEntries : {},
     selectedDate: nextState.selectedDate || todayKey(),
+    weeklyCycleDays: normalizeWeeklyCycleDays(nextState.weeklyCycleDays),
     priorityLogs: isPlainObject(nextState.priorityLogs) ? nextState.priorityLogs : {},
     reviewLogs: Array.isArray(nextState.reviewLogs) ? nextState.reviewLogs : [],
     hifzLogs: Array.isArray(nextState.hifzLogs) ? nextState.hifzLogs : [],
@@ -80,6 +83,15 @@ function normalizeState(nextState) {
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeWeeklyCycleDays(value) {
+  return Number(value) === 10 ? 10 : 7;
+}
+
+function weeklyCycleDays() {
+  state.weeklyCycleDays = normalizeWeeklyCycleDays(state.weeklyCycleDays);
+  return state.weeklyCycleDays;
 }
 
 function deriveSetupPages(pages) {
@@ -189,7 +201,7 @@ function rebuildFromHistory() {
           start,
           stopped,
           reviewed: reviewed.length,
-          quota: Math.ceil(pool.length / 7),
+          quota: Math.ceil(pool.length / weeklyCycleDays()),
         });
       }
     });
@@ -267,7 +279,7 @@ function weeklyContextForDate(targetDate) {
   cycleReviewed = Math.min(cycleReviewed, pool.length);
   return {
     start: nextReviewStartFrom(pool, weeklyStartPage),
-    quota: Math.ceil(pool.length / 7),
+    quota: Math.ceil(pool.length / weeklyCycleDays()),
     poolSize: pool.length,
     pool,
     cycleReviewed,
@@ -446,7 +458,7 @@ function dailyHifzTarget() {
 }
 
 function dailyReviewQuota() {
-  return Math.ceil(reviewPool().length / 7);
+  return Math.ceil(reviewPool().length / weeklyCycleDays());
 }
 
 function nextReviewStart() {
@@ -562,6 +574,14 @@ function nextAfter(pool, page) {
 function setTargetDate(value) {
   state.targetDate = value;
   state.message = "Target date updated.";
+  saveState();
+  render();
+}
+
+function setWeeklyCycleDays(days) {
+  state.weeklyCycleDays = normalizeWeeklyCycleDays(days);
+  state.message = `Weekly review cycle set to ${state.weeklyCycleDays} days.`;
+  rebuildFromHistory();
   saveState();
   render();
 }
@@ -954,11 +974,16 @@ function renderWeeklyPanel() {
   const entry = normalizeEntry(entryFor());
   const weeklyProgress = weeklyProgressForDate(selectedDateKey());
   const hasPool = weeklyProgress.cycleTotal > 0;
+  const cycleDays = weeklyCycleDays();
   return `
     <form class="task-panel" data-form="weekly">
       <div>
         <h2>Weekly Review</h2>
         <p class="note">Saving to ${selectedDateKey()}. Missed pages push the cycle forward.</p>
+      </div>
+      <div class="cycle-toggle" aria-label="Weekly review cycle length">
+        <button class="${cycleDays === 7 ? "selected" : ""}" data-cycle-days="7" type="button">7 days</button>
+        <button class="${cycleDays === 10 ? "selected" : ""}" data-cycle-days="10" type="button">10 days</button>
       </div>
       <div class="metric"><span>Start at page</span><strong>${weeklyProgress.start}</strong></div>
       <div class="metric"><span>Target today</span><strong>${weeklyProgress.dailyTarget || "No pool"}</strong></div>
@@ -1017,6 +1042,9 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-juz]").forEach((button) => {
     button.addEventListener("click", () => toggleJuzSolid(Number(button.dataset.juz)));
+  });
+  document.querySelectorAll("[data-cycle-days]").forEach((button) => {
+    button.addEventListener("click", () => setWeeklyCycleDays(Number(button.dataset.cycleDays)));
   });
   document.querySelector('[data-action="sync"]')?.addEventListener("click", () => {
     state.syncOpen = !state.syncOpen;
