@@ -3,7 +3,13 @@ const SOLIDIFICATION_DAYS = 5;
 const STORAGE_KEY = "quran-review-tracker-state-v1";
 const SUPABASE_CONFIG_KEY = "quran-review-tracker-supabase";
 
-const todayKey = () => new Date().toISOString().slice(0, 10);
+const formatLocalDateKey = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+const todayKey = () => formatLocalDateKey(new Date());
 const clampPage = (value) => Math.min(TOTAL_PAGES, Math.max(1, Number(value) || 1));
 const pageToJuz = (page) => Math.min(30, Math.floor((page - 1) / 20) + 1);
 const pagesForJuz = (juz) => {
@@ -530,7 +536,7 @@ function setSelectedDate(value) {
 function moveSelectedDate(days) {
   const date = new Date(`${selectedDateKey()}T00:00:00`);
   date.setDate(date.getDate() + days);
-  setSelectedDate(date.toISOString().slice(0, 10));
+  setSelectedDate(formatLocalDateKey(date));
 }
 
 function saveCalendarEntry(event) {
@@ -648,7 +654,7 @@ function seedDemo() {
 function addDays(days) {
   const date = new Date();
   date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return formatLocalDateKey(date);
 }
 
 function juzStatus(juz) {
