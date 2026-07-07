@@ -148,45 +148,12 @@ function rebuildFromHistory() {
     .forEach((date) => {
       const entry = normalizeEntry(state.dailyEntries[date]);
 
-      entry.memorizedPages.forEach((page) => {
-        pages[page] = {
-          ...(pages[page] || {}),
-          memorized: true,
-          weak: false,
-          priority: true,
-          streak: pages[page]?.streak || 0,
-          memorizedAt: pages[page]?.memorizedAt || date,
-          source: "daily",
-        };
-      });
       if (entry.memorizedPages.length) hifzLogs.unshift({ date, pages: entry.memorizedPages });
-
-      entry.weakFlaggedPages.forEach((page) => {
-        pages[page] = {
-          ...(pages[page] || {}),
-          memorized: true,
-          weak: true,
-          priority: true,
-          streak: pages[page]?.streak || 0,
-          memorizedAt: pages[page]?.memorizedAt || date,
-          source: pages[page]?.source || "daily",
-        };
-      });
-
-      entry.weakClearedPages.forEach((page) => {
-        if (!pages[page]) return;
-        pages[page].weak = false;
-        pages[page].priority = (pages[page].streak || 0) < SOLIDIFICATION_DAYS;
-      });
-
+      applyEntryPageChanges(pages, entry, date, { includeSameDayMemorizedInPriority: date < todayKey() });
       entry.priorityReviewedPages.forEach((page) => {
         const record = pages[page];
         if (!record) return;
         priorityLogs[`${date}:${page}`] = true;
-        if (!record.weak) {
-          record.streak = (record.streak || 0) + 1;
-          if (record.streak >= SOLIDIFICATION_DAYS) record.priority = false;
-        }
       });
 
       if (entry.weeklyStoppedAt) {
@@ -225,44 +192,7 @@ function weeklyContextForDate(targetDate) {
     .forEach((date) => {
       const entry = normalizeEntry(state.dailyEntries[date]);
 
-      entry.memorizedPages.forEach((page) => {
-        pages[page] = {
-          ...(pages[page] || {}),
-          memorized: true,
-          weak: false,
-          priority: true,
-          streak: pages[page]?.streak || 0,
-          memorizedAt: pages[page]?.memorizedAt || date,
-          source: "daily",
-        };
-      });
-
-      entry.weakFlaggedPages.forEach((page) => {
-        pages[page] = {
-          ...(pages[page] || {}),
-          memorized: true,
-          weak: true,
-          priority: true,
-          streak: pages[page]?.streak || 0,
-          memorizedAt: pages[page]?.memorizedAt || date,
-          source: pages[page]?.source || "daily",
-        };
-      });
-
-      entry.weakClearedPages.forEach((page) => {
-        if (!pages[page]) return;
-        pages[page].weak = false;
-        pages[page].priority = (pages[page].streak || 0) < SOLIDIFICATION_DAYS;
-      });
-
-      entry.priorityReviewedPages.forEach((page) => {
-        const record = pages[page];
-        if (!record) return;
-        if (!record.weak) {
-          record.streak = (record.streak || 0) + 1;
-          if (record.streak >= SOLIDIFICATION_DAYS) record.priority = false;
-        }
-      });
+      applyEntryPageChanges(pages, entry, date, { includeSameDayMemorizedInPriority: date < targetDate });
 
       if (date === targetDate) return;
       if (entry.weeklyStoppedAt) {
@@ -293,7 +223,10 @@ function priorityContextForDate(targetDate) {
     .sort()
     .forEach((date) => {
       const entry = normalizeEntry(state.dailyEntries[date]);
-      applyEntryPageChanges(pages, entry, date, { includePriorityReviewed: date !== targetDate });
+      applyEntryPageChanges(pages, entry, date, {
+        includePriorityReviewed: date !== targetDate,
+        includeSameDayMemorizedInPriority: date < targetDate,
+      });
     });
   const due = Object.keys(pages)
     .map(Number)
@@ -305,13 +238,14 @@ function priorityContextForDate(targetDate) {
 
 function applyEntryPageChanges(pages, entry, date, options = {}) {
   const includePriorityReviewed = options.includePriorityReviewed !== false;
+  const includeSameDayMemorizedInPriority = options.includeSameDayMemorizedInPriority !== false;
 
   entry.memorizedPages.forEach((page) => {
     pages[page] = {
       ...(pages[page] || {}),
       memorized: true,
       weak: false,
-      priority: true,
+      priority: includeSameDayMemorizedInPriority,
       streak: pages[page]?.streak || 0,
       memorizedAt: pages[page]?.memorizedAt || date,
       source: "daily",
@@ -629,12 +563,14 @@ function applyMemorySetup(event) {
   const solid = parsePages(form.get("solidPages"));
   const solidifying = parsePages(form.get("solidifyingPages"));
   const weak = parsePages(form.get("weakPages"));
+  const clear = parsePages(form.get("clearPages"));
 
   solid.forEach((page) => markPage(page, "solid"));
   solidifying.forEach((page) => markPage(page, "solidifying"));
   weak.forEach((page) => markPage(page, "weak"));
+  clear.forEach((page) => clearPageEverywhere(page));
 
-  const total = new Set([...solid, ...solidifying, ...weak]).size;
+  const total = new Set([...solid, ...solidifying, ...weak, ...clear]).size;
   state.message = total
     ? `Updated ${total} page${total === 1 ? "" : "s"} from memory setup.`
     : "Enter pages or choose Ajza' to update your memory map.";
@@ -642,6 +578,18 @@ function applyMemorySetup(event) {
   rebuildFromHistory();
   saveState();
   render();
+}
+
+function clearPageEverywhere(page) {
+  delete state.setupPages[page];
+  Object.values(state.dailyEntries).forEach((entry) => {
+    if (!entry) return;
+    entry.memorizedPages = (entry.memorizedPages || []).filter((item) => item !== page);
+    entry.priorityReviewedPages = (entry.priorityReviewedPages || []).filter((item) => item !== page);
+    entry.weakFlaggedPages = (entry.weakFlaggedPages || []).filter((item) => item !== page);
+    entry.weakClearedPages = (entry.weakClearedPages || []).filter((item) => item !== page);
+    if (Number(entry.weeklyStoppedAt) === page) entry.weeklyStoppedAt = "";
+  });
 }
 
 function markPage(page, status) {
@@ -859,6 +807,10 @@ function renderSetupPanel() {
         <div class="field">
           <label for="weakPages">Weak pages</label>
           <input id="weakPages" name="weakPages" placeholder="17, 45, 103-105" />
+        </div>
+        <div class="field">
+          <label for="clearPages">Clear memorized pages</label>
+          <input id="clearPages" name="clearPages" placeholder="122, 140-142" />
         </div>
         <button class="primary-button" type="submit">Update pages</button>
       </form>

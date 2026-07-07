@@ -7,7 +7,9 @@ Use **Memory Setup** to backfill your real history:
 - Already memorized pages and whole Ajza' go directly into the weekly review pool.
 - New or solidifying pages go into the priority queue for the 5-day streak.
 - Weak pages go into the priority queue and stay there until the weak flag is cleared.
+- Clear memorized pages removes a mistaken page from setup and dated activity.
 - Daily memorization logs require exact page numbers; the app does not assume memorization starts at page 1.
+- Pages memorized on a date begin showing in Priority Review the following day.
 
 Use **Calendar** to move between dates and edit a specific day's activity. The tracker rebuilds the current heat map, priority queue, and weekly review position from Memory Setup plus every saved calendar day through today.
 
