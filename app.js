@@ -233,7 +233,7 @@ function priorityContextForDate(targetDate) {
     .filter((page) => pages[page]?.memorized && (pages[page]?.priority || pages[page]?.weak))
     .sort((a, b) => a - b);
   const reviewed = normalizeEntry(state.dailyEntries[targetDate]).priorityReviewedPages.filter((page) => due.includes(page));
-  return { due, reviewed };
+  return { due, reviewed, records: pages };
 }
 
 function applyEntryPageChanges(pages, entry, date, options = {}) {
@@ -885,8 +885,8 @@ function renderMemorizePanel() {
 }
 
 function renderPriorityPanel() {
-  const pages = priorityPages();
   const progress = priorityContextForDate(selectedDateKey());
+  const pages = progress.due;
   const reviewedCount = progress.reviewed.length;
   const dueCount = progress.due.length;
   const progressPercent = percent(reviewedCount, dueCount);
@@ -896,17 +896,17 @@ function renderPriorityPanel() {
         <h2>Priority Review</h2>
         <p class="note">New pages need 5 daily reviews. Weak pages stay here until unflagged.</p>
       </div>
-      <div class="metric"><span>Needing daily review</span><strong>${pages.length}</strong></div>
+      <div class="metric"><span>Needing daily review</span><strong>${dueCount}</strong></div>
       ${renderProgressBar("Reviewed today", reviewedCount, dueCount, progressPercent)}
       <div class="row-list" data-priority-list>
-        ${pages.length ? pages.map(renderPriorityRow).join("") : `<div class="empty-state">No pages in priority review.</div>`}
+        ${pages.length ? pages.map((page) => renderPriorityRow(page, progress.records)).join("") : `<div class="empty-state">No pages in priority review.</div>`}
       </div>
     </section>
   `;
 }
 
-function renderPriorityRow(page) {
-  const record = state.pages[page];
+function renderPriorityRow(page, records = state.pages) {
+  const record = records[page] || state.pages[page];
   const checked = Boolean(state.priorityLogs[`${selectedDateKey()}:${page}`]);
   const dots = Array.from({ length: SOLIDIFICATION_DAYS }, (_, index) => `<i class="dot ${index < (record.streak || 0) ? "on" : ""}"></i>`).join("");
   return `
