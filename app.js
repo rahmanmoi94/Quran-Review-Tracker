@@ -52,6 +52,7 @@ function freshState(overrides = {}) {
 let state = loadState();
 rebuildFromHistory();
 let supabaseClient = null;
+let pendingPriorityScrollTop = null;
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -109,6 +110,11 @@ function formatPages(pages) {
 
 function addUniquePages(existing, pages) {
   return [...new Set([...(existing || []), ...pages])].sort((a, b) => a - b);
+}
+
+function percent(value, total) {
+  if (!total) return 0;
+  return Math.min(100, Math.round((value / total) * 100));
 }
 
 function saveState() {
@@ -199,6 +205,7 @@ function rebuildFromHistory() {
 function weeklyContextForDate(targetDate) {
   const pages = cloneRecords(state.setupPages);
   let weeklyStartPage = 1;
+  let cycleReviewed = 0;
 
   Object.keys(state.dailyEntries)
     .filter((date) => date <= targetDate && date <= todayKey())
@@ -248,16 +255,134 @@ function weeklyContextForDate(targetDate) {
       if (date === targetDate) return;
       if (entry.weeklyStoppedAt) {
         const pool = reviewPoolFrom(pages);
-        weeklyStartPage = nextAfter(pool, clampPage(entry.weeklyStoppedAt));
+        const start = nextReviewStartFrom(pool, weeklyStartPage);
+        const stopped = clampPage(entry.weeklyStoppedAt);
+        const reviewed = reviewRange(pool, Number(start), stopped);
+        cycleReviewed = nextCycleReviewedCount(pool, Number(start), stopped, cycleReviewed, reviewed.length);
+        weeklyStartPage = nextAfter(pool, stopped);
       }
     });
 
   const pool = reviewPoolFrom(pages);
+  cycleReviewed = Math.min(cycleReviewed, pool.length);
   return {
     start: nextReviewStartFrom(pool, weeklyStartPage),
     quota: Math.ceil(pool.length / 7),
     poolSize: pool.length,
+    pool,
+    cycleReviewed,
   };
+}
+
+function priorityContextForDate(targetDate) {
+  const pages = cloneRecords(state.setupPages);
+  Object.keys(state.dailyEntries)
+    .filter((date) => date <= targetDate && date <= todayKey())
+    .sort()
+    .forEach((date) => {
+      const entry = normalizeEntry(state.dailyEntries[date]);
+      applyEntryPageChanges(pages, entry, date, { includePriorityReviewed: date !== targetDate });
+    });
+  const due = Object.keys(pages)
+    .map(Number)
+    .filter((page) => pages[page]?.memorized && (pages[page]?.priority || pages[page]?.weak))
+    .sort((a, b) => a - b);
+  const reviewed = normalizeEntry(state.dailyEntries[targetDate]).priorityReviewedPages.filter((page) => due.includes(page));
+  return { due, reviewed };
+}
+
+function applyEntryPageChanges(pages, entry, date, options = {}) {
+  const includePriorityReviewed = options.includePriorityReviewed !== false;
+
+  entry.memorizedPages.forEach((page) => {
+    pages[page] = {
+      ...(pages[page] || {}),
+      memorized: true,
+      weak: false,
+      priority: true,
+      streak: pages[page]?.streak || 0,
+      memorizedAt: pages[page]?.memorizedAt || date,
+      source: "daily",
+    };
+  });
+
+  entry.weakFlaggedPages.forEach((page) => {
+    pages[page] = {
+      ...(pages[page] || {}),
+      memorized: true,
+      weak: true,
+      priority: true,
+      streak: pages[page]?.streak || 0,
+      memorizedAt: pages[page]?.memorizedAt || date,
+      source: pages[page]?.source || "daily",
+    };
+  });
+
+  entry.weakClearedPages.forEach((page) => {
+    if (!pages[page]) return;
+    pages[page].weak = false;
+    pages[page].priority = (pages[page].streak || 0) < SOLIDIFICATION_DAYS;
+  });
+
+  if (!includePriorityReviewed) return;
+  entry.priorityReviewedPages.forEach((page) => {
+    const record = pages[page];
+    if (!record) return;
+    if (!record.weak) {
+      record.streak = (record.streak || 0) + 1;
+      if (record.streak >= SOLIDIFICATION_DAYS) record.priority = false;
+    }
+  });
+}
+
+function nextCycleReviewedCount(pool, start, stopped, previousCount, reviewedCount) {
+  if (!pool.length || !reviewedCount) return Math.min(previousCount, pool.length);
+  const startIndex = pool.indexOf(start);
+  const stopIndex = pool.indexOf(stopped);
+  if (startIndex === -1 || stopIndex === -1) return Math.min(previousCount, pool.length);
+  if (stopIndex < startIndex) return stopIndex + 1;
+  const nextCount = previousCount + reviewedCount;
+  return nextCount >= pool.length ? 0 : nextCount;
+}
+
+function weeklyProgressForDate(date) {
+  const context = weeklyContextForDate(date);
+  const entry = normalizeEntry(state.dailyEntries[date]);
+  let dailyReviewed = 0;
+  let cycleReviewed = context.cycleReviewed;
+
+  if (entry.weeklyStoppedAt && context.pool.length) {
+    const start = Number(context.start);
+    const stopped = clampPage(entry.weeklyStoppedAt);
+    const reviewed = reviewRange(context.pool, start, stopped);
+    dailyReviewed = reviewed.length;
+    cycleReviewed = nextCycleReviewedCount(context.pool, start, stopped, context.cycleReviewed, reviewed.length);
+  }
+
+  return {
+    start: context.start,
+    dailyReviewed,
+    dailyTarget: context.quota,
+    dailyPercent: percent(Math.min(dailyReviewed, context.quota), context.quota),
+    cycleReviewed,
+    cycleTotal: context.poolSize,
+    cyclePercent: percent(cycleReviewed, context.poolSize),
+  };
+}
+
+function renderProgressBar(label, value, total, progressPercent) {
+  const displayTotal = total || 0;
+  return `
+    <div class="mini-progress" aria-label="${label}: ${value} of ${displayTotal}">
+      <div class="mini-progress-meta">
+        <span>${label}</span>
+        <strong>${value} / ${displayTotal}</strong>
+      </div>
+      <div class="mini-progress-track">
+        <div class="mini-progress-fill" style="width: ${progressPercent}%"></div>
+      </div>
+    </div>
+  `;
 }
 
 function cloneRecords(records) {
@@ -369,6 +494,8 @@ function logMemorized(event) {
 }
 
 function completePriorityPage(page, checked) {
+  const list = document.querySelector("[data-priority-list]");
+  pendingPriorityScrollTop = list ? list.scrollTop : null;
   const entry = entryFor();
   if (checked) {
     entry.priorityReviewedPages = addUniquePages(entry.priorityReviewedPages, [page]);
@@ -403,11 +530,11 @@ function toggleWeak(page) {
 function logWeeklyReview(event) {
   event.preventDefault();
   const stopped = clampPage(new FormData(event.currentTarget).get("stoppedAt"));
-  const pool = reviewPool();
-  if (!pool.length) return;
-  const start = Number(nextReviewStart());
-  const reviewed = reviewRange(pool, start, stopped);
-  const quota = dailyReviewQuota();
+  const context = weeklyContextForDate(selectedDateKey());
+  if (!context.pool.length) return;
+  const start = Number(context.start);
+  const reviewed = reviewRange(context.pool, start, stopped);
+  const quota = context.quota;
   entryFor().weeklyStoppedAt = stopped;
   state.message = reviewed.length < quota
     ? `Saved. ${quota - reviewed.length} page${quota - reviewed.length === 1 ? "" : "s"} roll forward without raising tomorrow's quota.`
@@ -631,6 +758,14 @@ function render() {
     </div>
   `;
   bindEvents();
+  restorePriorityScroll();
+}
+
+function restorePriorityScroll() {
+  if (pendingPriorityScrollTop === null) return;
+  const list = document.querySelector("[data-priority-list]");
+  if (list) list.scrollTop = pendingPriorityScrollTop;
+  pendingPriorityScrollTop = null;
 }
 
 function renderCalendarPanel() {
@@ -779,6 +914,10 @@ function renderMemorizePanel() {
 
 function renderPriorityPanel() {
   const pages = priorityPages();
+  const progress = priorityContextForDate(selectedDateKey());
+  const reviewedCount = progress.reviewed.length;
+  const dueCount = progress.due.length;
+  const progressPercent = percent(reviewedCount, dueCount);
   return `
     <section class="task-panel">
       <div>
@@ -786,7 +925,8 @@ function renderPriorityPanel() {
         <p class="note">New pages need 5 daily reviews. Weak pages stay here until unflagged.</p>
       </div>
       <div class="metric"><span>Needing daily review</span><strong>${pages.length}</strong></div>
-      <div class="row-list">
+      ${renderProgressBar("Reviewed today", reviewedCount, dueCount, progressPercent)}
+      <div class="row-list" data-priority-list>
         ${pages.length ? pages.map(renderPriorityRow).join("") : `<div class="empty-state">No pages in priority review.</div>`}
       </div>
     </section>
@@ -811,22 +951,24 @@ function renderPriorityRow(page) {
 }
 
 function renderWeeklyPanel() {
-  const pool = reviewPool();
-  const quota = dailyReviewQuota();
   const entry = normalizeEntry(entryFor());
+  const weeklyProgress = weeklyProgressForDate(selectedDateKey());
+  const hasPool = weeklyProgress.cycleTotal > 0;
   return `
     <form class="task-panel" data-form="weekly">
       <div>
         <h2>Weekly Review</h2>
         <p class="note">Saving to ${selectedDateKey()}. Missed pages push the cycle forward.</p>
       </div>
-      <div class="metric"><span>Start at page</span><strong>${nextReviewStart()}</strong></div>
-      <div class="metric"><span>Target today</span><strong>${quota || "No pool"}</strong></div>
+      <div class="metric"><span>Start at page</span><strong>${weeklyProgress.start}</strong></div>
+      <div class="metric"><span>Target today</span><strong>${weeklyProgress.dailyTarget || "No pool"}</strong></div>
+      ${renderProgressBar("Daily progress", weeklyProgress.dailyReviewed, weeklyProgress.dailyTarget, weeklyProgress.dailyPercent)}
+      ${renderProgressBar("Cycle progress", weeklyProgress.cycleReviewed, weeklyProgress.cycleTotal, weeklyProgress.cyclePercent)}
       <div class="field">
         <label for="stoppedAt">Stopped at page</label>
-        <input id="stoppedAt" name="stoppedAt" inputmode="numeric" value="${entry.weeklyStoppedAt || ""}" placeholder="${pool.length ? nextAfter(pool, Number(nextReviewStart())) : "No review pool yet"}" ${pool.length ? "" : "disabled"} />
+        <input id="stoppedAt" name="stoppedAt" inputmode="numeric" value="${entry.weeklyStoppedAt || ""}" placeholder="${hasPool ? weeklyProgress.start : "No review pool yet"}" ${hasPool ? "" : "disabled"} />
       </div>
-      <button class="primary-button" type="submit" ${pool.length ? "" : "disabled"}>Save review</button>
+      <button class="primary-button" type="submit" ${hasPool ? "" : "disabled"}>Save review</button>
       <p class="message">Last stop: ${state.weeklyLastStoppedPage || "None yet"}</p>
     </form>
   `;
