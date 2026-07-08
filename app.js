@@ -236,7 +236,7 @@ function priorityContextForDate(targetDate) {
     });
   const due = Object.keys(pages)
     .map(Number)
-    .filter((page) => pages[page]?.memorized && (pages[page]?.priority || pages[page]?.weak))
+    .filter((page) => pages[page]?.memorized && !pages[page]?.pendingPriority && (pages[page]?.priority || pages[page]?.weak))
     .sort((a, b) => a - b);
   const reviewed = normalizeEntry(state.dailyEntries[targetDate]).priorityReviewedPages.filter((page) => due.includes(page));
   return { due, reviewed, records: pages };
@@ -251,7 +251,8 @@ function applyEntryPageChanges(pages, entry, date, options = {}) {
       ...(pages[page] || {}),
       memorized: true,
       weak: false,
-      priority: includeSameDayMemorizedInPriority,
+      priority: true,
+      pendingPriority: !includeSameDayMemorizedInPriority,
       streak: pages[page]?.streak || 0,
       memorizedAt: pages[page]?.memorizedAt || date,
       source: "daily",
@@ -264,6 +265,7 @@ function applyEntryPageChanges(pages, entry, date, options = {}) {
       memorized: true,
       weak: true,
       priority: true,
+      pendingPriority: false,
       streak: pages[page]?.streak || 0,
       memorizedAt: pages[page]?.memorizedAt || date,
       source: pages[page]?.source || "daily",
@@ -272,6 +274,7 @@ function applyEntryPageChanges(pages, entry, date, options = {}) {
 
   entry.weakClearedPages.forEach((page) => {
     if (!pages[page]) return;
+    pages[page].pendingPriority = false;
     pages[page].weak = false;
     pages[page].priority = (pages[page].streak || 0) < SOLIDIFICATION_DAYS;
   });
@@ -354,7 +357,7 @@ function normalizeEntry(entry) {
 function reviewPoolFrom(pages) {
   return Object.keys(pages)
     .map(Number)
-    .filter((page) => pages[page]?.memorized && !pages[page]?.priority && !pages[page]?.weak)
+    .filter((page) => pages[page]?.memorized && !pages[page]?.pendingPriority && !pages[page]?.priority && !pages[page]?.weak)
     .sort((a, b) => a - b);
 }
 
@@ -375,7 +378,7 @@ function memorizedPages() {
 function priorityPages() {
   return memorizedPages().filter((page) => {
     const record = pageRecord(page);
-    return record?.weak || record?.priority;
+    return !record?.pendingPriority && (record?.weak || record?.priority);
   });
 }
 
@@ -610,6 +613,7 @@ function markPage(page, status) {
     memorized: true,
     weak: status === "weak",
     priority: status === "weak" || status === "solidifying",
+    pendingPriority: false,
     streak: status === "solid" ? SOLIDIFICATION_DAYS : state.setupPages[page]?.streak || 0,
     memorizedAt: state.setupPages[page]?.memorizedAt || todayKey(),
     source: status === "solid" ? "setup" : state.pages[page]?.source || "manual",
@@ -634,7 +638,7 @@ function toggleJuzSolid(juz) {
 function seedDemo() {
   state = freshState({ targetDate: addDays(210), selectedDate: todayKey() });
   for (let page = 1; page <= 120; page += 1) {
-    state.setupPages[page] = { memorized: true, priority: false, weak: false, streak: SOLIDIFICATION_DAYS, source: "setup" };
+    state.setupPages[page] = { memorized: true, priority: false, pendingPriority: false, weak: false, streak: SOLIDIFICATION_DAYS, source: "setup" };
   }
   [104, 107, 119].forEach((page) => {
     state.setupPages[page].weak = true;
