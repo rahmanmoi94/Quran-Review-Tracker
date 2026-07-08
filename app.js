@@ -672,6 +672,8 @@ function juzStatus(juz) {
 function render() {
   const app = document.querySelector("#app");
   const memorized = memorizedPages();
+  const selectedPriority = priorityContextForDate(selectedDateKey());
+  const selectedWeekly = weeklyContextForDate(selectedDateKey());
   const progress = Math.round((memorized.length / TOTAL_PAGES) * 1000) / 10;
   app.innerHTML = `
     <header class="topbar">
@@ -721,9 +723,9 @@ function render() {
 
     <section class="status-strip" aria-label="Current tracker status">
       <div class="status-item"><span>Remaining hifz</span><strong>${TOTAL_PAGES - memorized.length} pages</strong></div>
-      <div class="status-item"><span>Priority queue</span><strong>${priorityPages().length} pages</strong></div>
-      <div class="status-item"><span>Review pool</span><strong>${reviewPool().length} pages</strong></div>
-      <div class="status-item"><span>Next weekly start</span><strong>${nextReviewStart()}</strong></div>
+      <div class="status-item"><span>Priority queue</span><strong>${selectedPriority.due.length} pages</strong></div>
+      <div class="status-item"><span>Review pool</span><strong>${selectedWeekly.poolSize} pages</strong></div>
+      <div class="status-item"><span>Next weekly start</span><strong>${selectedWeekly.start}</strong></div>
     </section>
 
     ${renderSyncPanel()}
@@ -950,6 +952,7 @@ function renderWeeklyPanel() {
       </div>
       <div class="metric"><span>Start at page</span><strong>${weeklyProgress.start}</strong></div>
       <div class="metric"><span>Target today</span><strong>${weeklyProgress.dailyTarget || "No pool"}</strong></div>
+      <p class="metric-note">Pool ${weeklyProgress.cycleTotal} pages · ${weeklyCycleDays()} day cycle</p>
       ${renderProgressBar("Daily progress", weeklyProgress.dailyReviewed, weeklyProgress.dailyTarget, weeklyProgress.dailyPercent)}
       ${renderProgressBar("Cycle progress", weeklyProgress.cycleReviewed, weeklyProgress.cycleTotal, weeklyProgress.cyclePercent)}
       <div class="field">
