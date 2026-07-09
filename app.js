@@ -2,6 +2,11 @@ const TOTAL_PAGES = 604;
 const SOLIDIFICATION_DAYS = 5;
 const STORAGE_KEY = "quran-review-tracker-state-v1";
 const SUPABASE_CONFIG_KEY = "quran-review-tracker-supabase";
+const JUZ_START_PAGES = [
+  1, 22, 42, 62, 82, 102, 121, 142, 162, 182,
+  201, 222, 242, 262, 282, 302, 322, 342, 362, 382,
+  402, 422, 442, 462, 482, 502, 522, 542, 562, 582,
+];
 
 const formatLocalDateKey = (date) => {
   const year = date.getFullYear();
@@ -11,10 +16,17 @@ const formatLocalDateKey = (date) => {
 };
 const todayKey = () => formatLocalDateKey(new Date());
 const clampPage = (value) => Math.min(TOTAL_PAGES, Math.max(1, Number(value) || 1));
-const pageToJuz = (page) => Math.min(30, Math.floor((page - 1) / 20) + 1);
+const pageToJuz = (page) => {
+  const normalizedPage = clampPage(page);
+  let juz = 1;
+  for (let index = 0; index < JUZ_START_PAGES.length; index += 1) {
+    if (normalizedPage >= JUZ_START_PAGES[index]) juz = index + 1;
+  }
+  return juz;
+};
 const pagesForJuz = (juz) => {
-  const start = (juz - 1) * 20 + 1;
-  const end = juz === 30 ? TOTAL_PAGES : Math.min(TOTAL_PAGES, juz * 20);
+  const start = JUZ_START_PAGES[juz - 1];
+  const end = juz === 30 ? TOTAL_PAGES : JUZ_START_PAGES[juz] - 1;
   return Array.from({ length: end - start + 1 }, (_, index) => start + index);
 };
 
