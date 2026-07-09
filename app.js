@@ -61,6 +61,7 @@ let state = loadState();
 rebuildFromHistory();
 let supabaseClient = null;
 let pendingPriorityScrollTop = null;
+let cloudSessionChecked = false;
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
@@ -989,6 +990,7 @@ function renderSyncPanel() {
         <button class="soft-button" data-action="email-login">Sign in</button>
       </div>
       <div class="footer-tools">
+        <button class="ghost-button" data-action="refresh-cloud">Refresh cloud</button>
         <button class="ghost-button" data-action="email-signup">Create account</button>
         <button class="ghost-button" data-action="google-login">Google</button>
       </div>
@@ -1030,6 +1032,7 @@ function bindEvents() {
   document.querySelector('[data-action="email-login"]')?.addEventListener("click", signInWithEmail);
   document.querySelector('[data-action="email-signup"]')?.addEventListener("click", signUpWithEmail);
   document.querySelector('[data-action="google-login"]')?.addEventListener("click", signInWithGoogle);
+  document.querySelector('[data-action="refresh-cloud"]')?.addEventListener("click", refreshCloudData);
 }
 
 function exportJson() {
@@ -1148,8 +1151,9 @@ async function signInWithGoogle() {
 
 async function loadCloud() {
   const client = await loadSupabase();
+  if (!client) return false;
   const { data: auth } = await client.auth.getUser();
-  if (!auth?.user) return;
+  if (!auth?.user) return false;
   const { data, error } = await client
     .from("quran_tracker_profiles")
     .select("data")
@@ -1158,6 +1162,41 @@ async function loadCloud() {
   if (error) throw error;
   if (data?.data) {
     state = normalizeState({ ...data.data, syncStatus: "Signed in" });
+    return true;
+  }
+  state.syncStatus = "Signed in";
+  return false;
+}
+
+function persistLocalStateOnly() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+async function refreshCloudData() {
+  try {
+    const loaded = await loadCloud();
+    state.message = loaded ? "Cloud data refreshed." : "Signed in, but no cloud profile data found yet.";
+    persistLocalStateOnly();
+  } catch (error) {
+    state.message = error.message;
+  }
+  render();
+}
+
+async function checkExistingCloudSession() {
+  if (cloudSessionChecked) return;
+  cloudSessionChecked = true;
+  try {
+    const client = await loadSupabase();
+    if (!client) return;
+    const { data: auth } = await client.auth.getUser();
+    if (!auth?.user) return;
+    await loadCloud();
+    state.message = "Cloud data loaded.";
+    persistLocalStateOnly();
+    render();
+  } catch {
+    state.syncStatus = syncStatusLabel();
   }
 }
 
@@ -1178,3 +1217,4 @@ async function saveCloud() {
 }
 
 render();
+checkExistingCloudSession();
