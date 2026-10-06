@@ -306,7 +306,7 @@ function applyEntryPageChanges(pages, entry, date, options = {}) {
 function cycleReviewCounts(pool, start, stopped, previousCount, reviewedCount) {
   if (!pool.length || !reviewedCount) return Math.min(previousCount, pool.length);
   const startIndex = pool.indexOf(start);
-  const stopIndex = pool.indexOf(stopped);
+  const stopIndex = stopIndexForReview(pool, startIndex, stopped);
   if (startIndex === -1 || stopIndex === -1) return Math.min(previousCount, pool.length);
   if (stopIndex < startIndex) {
     const wrappedCount = stopIndex + 1;
@@ -530,10 +530,29 @@ function logWeeklyReview(event) {
 
 function reviewRange(pool, start, stopped) {
   const startIndex = pool.indexOf(start);
-  const stopIndex = pool.indexOf(stopped);
+  const stopIndex = stopIndexForReview(pool, startIndex, stopped);
   if (startIndex === -1 || stopIndex === -1) return [];
   if (stopIndex >= startIndex) return pool.slice(startIndex, stopIndex + 1);
   return [...pool.slice(startIndex), ...pool.slice(0, stopIndex + 1)];
+}
+
+function stopIndexForReview(pool, startIndex, stopped) {
+  if (startIndex === -1 || !pool.length) return -1;
+  const exactIndex = pool.indexOf(stopped);
+  if (exactIndex !== -1) return exactIndex;
+
+  const startPage = pool[startIndex];
+  if (stopped >= startPage) {
+    for (let index = pool.length - 1; index >= startIndex; index -= 1) {
+      if (pool[index] <= stopped) return index;
+    }
+    return -1;
+  }
+
+  for (let index = startIndex - 1; index >= 0; index -= 1) {
+    if (pool[index] <= stopped) return index;
+  }
+  return -1;
 }
 
 function nextAfter(pool, page) {
