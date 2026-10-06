@@ -203,7 +203,6 @@ function rebuildFromHistory() {
 function weeklyContextForDate(targetDate) {
   const pages = cloneRecords(state.setupPages);
   let weeklyStartPage = 1;
-  let cycleReviewed = 0;
 
   Object.keys(state.dailyEntries)
     .filter((date) => date <= targetDate && date <= todayKey())
@@ -218,16 +217,15 @@ function weeklyContextForDate(targetDate) {
         const pool = reviewPoolFrom(pages);
         const start = nextReviewStartFrom(pool, weeklyStartPage);
         const stopped = clampPage(entry.weeklyStoppedAt);
-        const reviewed = reviewRange(pool, Number(start), stopped);
-        cycleReviewed = nextCycleReviewedCount(pool, Number(start), stopped, cycleReviewed, reviewed.length);
         weeklyStartPage = nextAfter(pool, stopped);
       }
     });
 
   const pool = reviewPoolFrom(pages);
-  cycleReviewed = Math.min(cycleReviewed, pool.length);
+  const start = nextReviewStartFrom(pool, weeklyStartPage);
+  const cycleReviewed = cycleProgressBeforeStart(pool, start);
   return {
-    start: nextReviewStartFrom(pool, weeklyStartPage),
+    start,
     quota: Math.ceil(pool.length / weeklyCycleDays()),
     poolSize: pool.length,
     pool,
@@ -323,8 +321,17 @@ function nextCycleReviewedCount(pool, start, stopped, previousCount, reviewedCou
 }
 
 function displayCycleReviewedCount(pool, start, stopped, previousCount, reviewedCount) {
-  const counts = cycleReviewCounts(pool, start, stopped, previousCount, reviewedCount);
-  return typeof counts === "number" ? counts : counts.display;
+  if (!pool.length || !reviewedCount) return Math.min(previousCount, pool.length);
+  const startIndex = pool.indexOf(start);
+  const stopIndex = stopIndexForReview(pool, startIndex, stopped);
+  if (startIndex === -1 || stopIndex === -1) return Math.min(previousCount, pool.length);
+  return stopIndex + 1;
+}
+
+function cycleProgressBeforeStart(pool, start) {
+  if (!pool.length || start === "No pool") return 0;
+  const startIndex = pool.indexOf(Number(start));
+  return startIndex === -1 ? 0 : startIndex;
 }
 
 function weeklyProgressForDate(date) {
