@@ -303,14 +303,28 @@ function applyEntryPageChanges(pages, entry, date, options = {}) {
   });
 }
 
-function nextCycleReviewedCount(pool, start, stopped, previousCount, reviewedCount) {
+function cycleReviewCounts(pool, start, stopped, previousCount, reviewedCount) {
   if (!pool.length || !reviewedCount) return Math.min(previousCount, pool.length);
   const startIndex = pool.indexOf(start);
   const stopIndex = pool.indexOf(stopped);
   if (startIndex === -1 || stopIndex === -1) return Math.min(previousCount, pool.length);
-  if (stopIndex < startIndex) return stopIndex + 1;
+  if (stopIndex < startIndex) {
+    const wrappedCount = stopIndex + 1;
+    return { display: wrappedCount, carry: wrappedCount };
+  }
   const nextCount = previousCount + reviewedCount;
-  return nextCount >= pool.length ? 0 : nextCount;
+  if (nextCount >= pool.length) return { display: pool.length, carry: 0 };
+  return { display: nextCount, carry: nextCount };
+}
+
+function nextCycleReviewedCount(pool, start, stopped, previousCount, reviewedCount) {
+  const counts = cycleReviewCounts(pool, start, stopped, previousCount, reviewedCount);
+  return typeof counts === "number" ? counts : counts.carry;
+}
+
+function displayCycleReviewedCount(pool, start, stopped, previousCount, reviewedCount) {
+  const counts = cycleReviewCounts(pool, start, stopped, previousCount, reviewedCount);
+  return typeof counts === "number" ? counts : counts.display;
 }
 
 function weeklyProgressForDate(date) {
@@ -324,7 +338,7 @@ function weeklyProgressForDate(date) {
     const stopped = clampPage(entry.weeklyStoppedAt);
     const reviewed = reviewRange(context.pool, start, stopped);
     dailyReviewed = reviewed.length;
-    cycleReviewed = nextCycleReviewedCount(context.pool, start, stopped, context.cycleReviewed, reviewed.length);
+    cycleReviewed = displayCycleReviewedCount(context.pool, start, stopped, context.cycleReviewed, reviewed.length);
   }
 
   return {
