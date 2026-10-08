@@ -2,10 +2,13 @@ const TOTAL_PAGES = 604;
 const SOLIDIFICATION_DAYS = 5;
 const STORAGE_KEY = "quran-review-tracker-state-v1";
 const SUPABASE_CONFIG_KEY = "quran-review-tracker-supabase";
-const JUZ_START_PAGES = [
-  1, 22, 42, 62, 82, 102, 121, 142, 162, 182,
-  201, 222, 242, 262, 282, 302, 322, 342, 362, 382,
-  402, 422, 442, 462, 482, 502, 522, 542, 562, 582,
+const JUZ_PAGE_RANGES = [
+  [1, 21], [22, 41], [42, 61], [62, 81], [82, 101],
+  [102, 121], [122, 141], [142, 161], [162, 181], [182, 201],
+  [202, 221], [222, 241], [242, 261], [262, 281], [282, 301],
+  [302, 321], [322, 341], [342, 361], [362, 381], [382, 401],
+  [402, 421], [422, 441], [442, 461], [462, 481], [482, 501],
+  [502, 521], [522, 541], [542, 561], [562, 581], [582, 604],
 ];
 
 const formatLocalDateKey = (date) => {
@@ -18,15 +21,11 @@ const todayKey = () => formatLocalDateKey(new Date());
 const clampPage = (value) => Math.min(TOTAL_PAGES, Math.max(1, Number(value) || 1));
 const pageToJuz = (page) => {
   const normalizedPage = clampPage(page);
-  let juz = 1;
-  for (let index = 0; index < JUZ_START_PAGES.length; index += 1) {
-    if (normalizedPage >= JUZ_START_PAGES[index]) juz = index + 1;
-  }
-  return juz;
+  const exactMatch = JUZ_PAGE_RANGES.findIndex(([start, end]) => normalizedPage >= start && normalizedPage <= end);
+  return exactMatch === -1 ? 1 : exactMatch + 1;
 };
 const pagesForJuz = (juz) => {
-  const start = JUZ_START_PAGES[juz - 1];
-  const end = juz === 30 ? TOTAL_PAGES : JUZ_START_PAGES[juz] - 1;
+  const [start, end] = JUZ_PAGE_RANGES[juz - 1];
   return Array.from({ length: end - start + 1 }, (_, index) => start + index);
 };
 
